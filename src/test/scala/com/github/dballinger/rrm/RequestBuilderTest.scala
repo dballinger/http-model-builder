@@ -32,6 +32,50 @@ class RequestBuilderTest extends FlatSpec with MockHttpSupport with Matchers wit
     actualStatus shouldBe expectedStatus
   }
 
+  it should "respond with headers" in {
+    val expectedHeaders = Map("a" -> "aa", "b" -> "bb")
+    val path = "/res"
+    val response = expectedHeaders.foldLeft(aResponse()) {
+      (resp, header) =>
+        val (name, value) = header
+        resp.withHeader(name, value)
+    }
+    wiremock.stubFor(get(urlEqualTo(path)).willReturn(response))
+
+    val actualHeaders = aRequestFor(urlForPath(path)).get().headers
+
+    expectedHeaders foreach {
+      expectedHeader =>
+        actualHeaders should contain(expectedHeader)
+    }
+  }
+
+  it should "respond with the body" in {
+    val expectedBody = "The body!"
+    val path = "/res"
+    wiremock.stubFor(get(urlEqualTo(path)).willReturn(aResponse().withBody(expectedBody)))
+
+    val actualBody = aRequestFor(urlForPath(path)).get().bodyAsString
+
+    actualBody shouldBe expectedBody
+  }
+
+  it should "respond with the body decoded using the Content-Encoding header" in {
+    val expectedBody = "#£@<>?/`~§±"
+    val charset = "ISO-8859-1"
+    val expectedBodyBytes = expectedBody.getBytes(charset)
+    val path = "/res"
+    wiremock.stubFor(get(urlEqualTo(path)).willReturn(
+      aResponse()
+          .withHeader("Content-Type", s"text/plain; charset=$charset")
+          .withBody(expectedBodyBytes))
+    )
+
+    val actualBody = aRequestFor(urlForPath(path)).get().bodyAsString
+
+    actualBody shouldBe expectedBody
+  }
+
   it should "GET a resource" in {
     val path = "/res"
     wiremock.stubFor(

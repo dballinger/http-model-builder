@@ -1,11 +1,16 @@
 package com.github.dballinger.rrm
 
+import java.io.ByteArrayOutputStream
 import java.net.URI
+import java.nio.charset.Charset
 
 import org.apache.http.client.methods._
 import org.apache.http.client.utils.URIBuilder
 import org.apache.http.entity.StringEntity
 import org.apache.http.impl.client.HttpClientBuilder
+
+import scala.io.{Codec, Source}
+import scala.util.Try
 
 class DataSendingRequestBuilder(baseUrl: String, body: Option[String], headers: Map[String, String], params: Map[String, String]) {
 
@@ -40,7 +45,35 @@ class DataSendingRequestBuilder(baseUrl: String, body: Option[String], headers: 
     }
     val httpResponse = client.execute(request)
     val response = new Response {
-      val status: Int = httpResponse.getStatusLine.getStatusCode
+
+      import scala.collection.JavaConverters._
+
+      val status = httpResponse.getStatusLine.getStatusCode
+
+      val headers = httpResponse.getAllHeaders.map {
+        header =>
+          (header.getName, header.getValue)
+      }.toMap
+
+      val bodyAsString = {
+        val entity = httpResponse.getEntity
+        val out = new ByteArrayOutputStream()
+        entity.writeTo(out)
+        val charset = Try {
+          entity.getContentType.getElements.flatMap {
+            element =>
+              element.getParameters
+          }.find {
+            param =>
+              param.getName == "charset"
+          }.map {
+            param =>
+              Charset.forName(param.getValue)
+          }
+        }.toOption.flatten.getOrElse(Charset.forName("utf-8"))
+
+        new String(out.toByteArray, charset)
+      }
     }
     client.close()
     response
@@ -83,5 +116,10 @@ object RequestBuilder {
 }
 
 trait Response {
+
   def status: Int
+
+  def headers: Map[String, String]
+
+  def bodyAsString: String
 }
